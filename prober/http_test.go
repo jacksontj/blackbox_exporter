@@ -520,6 +520,7 @@ func TestHTTPUsesTargetAsTLSServerName(t *testing.T) {
 	}
 
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	    http.Redirect(w, r, "https://www.google.com", 302)
 	}))
 	ts.TLS = &tls.Config{
 		Certificates: []tls.Certificate{testcert},
@@ -544,6 +545,7 @@ func TestHTTPUsesTargetAsTLSServerName(t *testing.T) {
 	// Replace IP address with hostname.
 	url := strings.Replace(ts.URL, "127.0.0.1", "localhost", -1)
 	url = strings.Replace(url, "[::1]", "localhost", -1)
+	fmt.Println("before", ts.URL, url)
 
 	result := ProbeHTTP(context.Background(), url, module, registry, log.NewNopLogger())
 	if !result {

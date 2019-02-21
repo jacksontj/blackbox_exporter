@@ -153,6 +153,43 @@ func NewHTTPClientFromConfig(cfg *HTTPClientConfig) (*http.Client, error) {
 	return &http.Client{Transport: rt}, nil
 }
 
+// FromTransport returns a new HTTP client configured for the
+// given config.HTTPClientConfig using the Transport passed in as a base
+func NewHTTPClientFromConfigFromTransport(cfg *HTTPClientConfig, transport *http.Transport) (*http.Client, error) {
+	tlsConfig, err := NewTLSConfig(&cfg.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// It's the caller's job to handle timeouts
+    transport.Proxy = http.ProxyURL(cfg.ProxyURL.URL)
+    transport.DisableKeepAlives = true
+    transport.TLSClientConfig = tlsConfig
+    var rt http.RoundTripper = transport
+
+	// If a bearer token is provided, create a round tripper that will set the
+	// Authorization header correctly on each request.
+	bearerToken := cfg.BearerToken
+	if len(bearerToken) == 0 && len(cfg.BearerTokenFile) > 0 {
+		b, err := ioutil.ReadFile(cfg.BearerTokenFile)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read bearer token file %s: %s", cfg.BearerTokenFile, err)
+		}
+		bearerToken = Secret(strings.TrimSpace(string(b)))
+	}
+
+	if len(bearerToken) > 0 {
+		rt = NewBearerAuthRoundTripper(bearerToken, rt)
+	}
+
+	if cfg.BasicAuth != nil {
+		rt = NewBasicAuthRoundTripper(cfg.BasicAuth.Username, Secret(cfg.BasicAuth.Password), rt)
+	}
+
+	// Return a new client with the configured round tripper.
+	return &http.Client{Transport: rt}, nil
+}
+
 type bearerAuthRoundTripper struct {
 	bearerToken Secret
 	rt          http.RoundTripper

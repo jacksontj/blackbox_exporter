@@ -202,6 +202,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		level.Error(logger).Log("msg", "Could not parse target URL", "err", err)
 		return false
 	}
+	/*
 	targetHost, targetPort, err := net.SplitHostPort(targetURL.Host)
 	// If split fails, assuming it's a hostname without port part.
 	if err != nil {
@@ -214,14 +215,41 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		return false
 	}
 	durationGaugeVec.WithLabelValues("resolve").Add(lookupTime)
+	*/
 
 	httpClientConfig := module.HTTP.HTTPClientConfig
 	if len(httpClientConfig.TLSConfig.ServerName) == 0 {
 		// If there is no `server_name` in tls_config, use
 		// the hostname of the target.
-		httpClientConfig.TLSConfig.ServerName = targetHost
+		//httpClientConfig.TLSConfig.ServerName = targetHost
 	}
-	client, err := pconfig.NewHTTPClientFromConfig(&httpClientConfig)
+	
+	baseTransport := &http.Transport{
+	    DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+	        defaultDialContext := (&net.Dialer{
+                    Timeout:   30 * time.Second,
+                    KeepAlive: 30 * time.Second,
+                    DualStack: true,
+            }).DialContext
+	        switch module.HTTP.IPProtocol {
+	            case "ip6":
+	                conn, err := defaultDialContext(ctx, "tcp6", addr)
+	                if err != nil {
+	                    return  defaultDialContext(ctx, "tcp4", addr)
+	                }
+	                return conn, err
+	            
+	            default:
+	                conn, err := defaultDialContext(ctx, "tcp4", addr)
+	                if err != nil {
+	                    return  defaultDialContext(ctx, "tcp6", addr)
+	                }
+	                return conn, err
+	        }
+	    },
+	}
+	
+	client, err := pconfig.NewHTTPClientFromConfigFromTransport(&httpClientConfig, baseTransport)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error generating HTTP client", "err", err)
 		return false
@@ -253,12 +281,14 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	}
 
 	// Replace the host field in the URL with the IP we resolved.
-	origHost := targetURL.Host
-	if targetPort == "" {
-		targetURL.Host = "[" + ip.String() + "]"
-	} else {
-		targetURL.Host = net.JoinHostPort(ip.String(), targetPort)
-	}
+	/*
+    origHost := targetURL.Host
+    if targetPort == "" {
+	    targetURL.Host = "[" + ip.String() + "]"
+    } else {
+	    targetURL.Host = net.JoinHostPort(ip.String(), targetPort)
+    }
+    */
 
 	var body io.Reader
 
@@ -267,8 +297,9 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		body = strings.NewReader(httpConfig.Body)
 	}
 
+    fmt.Println("request to", targetURL.String())
 	request, err := http.NewRequest(httpConfig.Method, targetURL.String(), body)
-	request.Host = origHost
+	//request.Host = origHost
 	request = request.WithContext(ctx)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error creating request", "err", err)
@@ -296,6 +327,7 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	request = request.WithContext(httptrace.WithClientTrace(request.Context(), trace))
 
 	resp, err := client.Do(request)
+	    fmt.Println("resp", resp, err)
 	// Err won't be nil if redirects were turned off. See https://github.com/golang/go/issues/3795
 	if err != nil && resp == nil {
 		level.Error(logger).Log("msg", "Error for HTTP request", "err", err)
