@@ -496,6 +496,22 @@ func TestTLSConfigIsIgnoredForPlainHTTP(t *testing.T) {
 	checkRegistryResults(expectedResults, mfs, t)
 }
 
+func TestHTTPSRedirect(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	module := config.Module{
+		Timeout: time.Second,
+		HTTP: config.HTTPProbe{
+			IPProtocol:         "ip4",
+			IPProtocolFallback: true,
+		},
+	}
+
+	result := ProbeHTTP(context.Background(), "https://httpbin.org/redirect-to?url=https%3A%2F%2Fgoogle.com&status_code=302&d", module, registry, log.NewNopLogger())
+	if !result {
+		t.Fatalf("TLS probe failed unexpectedly")
+	}
+}
+
 func TestHTTPUsesTargetAsTLSServerName(t *testing.T) {
 	// Create test certificates valid for 1 day.
 	certExpiry := time.Now().AddDate(0, 0, 1)

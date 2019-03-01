@@ -122,6 +122,10 @@ func NewHTTPClientFromConfig(cfg *HTTPClientConfig) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+    return NewHTTPClientFromConfigWithTLSConfig(cfg, tlsConfig)
+}
+
+func NewHTTPClientFromConfigWithTLSConfig(cfg *HTTPClientConfig, tlsConfig *tls.Config) (*http.Client, error) {
 
 	// It's the caller's job to handle timeouts
 	var rt http.RoundTripper = &http.Transport{

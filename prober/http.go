@@ -221,7 +221,13 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 		// the hostname of the target.
 		httpClientConfig.TLSConfig.ServerName = targetHost
 	}
-	client, err := pconfig.NewHTTPClientFromConfig(&httpClientConfig)
+
+	tlsConfig, err := pconfig.NewTLSConfig(&httpClientConfig.TLSConfig)
+	if err != nil {
+	    panic(err)
+	}
+
+	client, err := pconfig.NewHTTPClientFromConfigWithTLSConfig(&httpClientConfig, tlsConfig)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error generating HTTP client", "err", err)
 		return false
@@ -239,6 +245,9 @@ func ProbeHTTP(ctx context.Context, target string, module config.Module, registr
 	client.Transport = tt
 
 	client.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+	    fmt.Println("before", httpClientConfig.TLSConfig.ServerName)
+	    fmt.Println("after?", r.URL.Host)
+	    tlsConfig.ServerName = r.URL.Host
 		level.Info(logger).Log("msg", "Received redirect", "url", r.URL.String())
 		redirects = len(via)
 		if redirects > 10 || httpConfig.NoFollowRedirects {
